@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Stock Data Intelligence Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --card:    #1f2937;
+    --border:  #30363d;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --red:     #f85149;
+    --yellow:  #e3b341;
+    --text:    #c9d1d9;
+    --muted:   #8b949e;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 1.2rem; font-weight: 600; color: #fff; }
+  header span { font-size: .85rem; color: var(--muted); }
+  .badge { background: #238636; color: #fff; font-size: .7rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+
+  .layout { display: flex; flex: 1; height: calc(100vh - 57px); }
+
+  /* ── Sidebar ── */
+  aside { width: 230px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+  aside h2 { font-size: .75rem; letter-spacing: .08em; color: var(--muted); padding: 16px 16px 8px; text-transform: uppercase; }
+  .company-item { padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all .15s; display: flex; flex-direction: column; gap: 2px; }
+  .company-item:hover { background: var(--card); border-left-color: var(--accent); }
+  .company-item.active { background: var(--card); border-left-color: var(--accent); }
+  .company-item .sym { font-weight: 700; font-size: .9rem; color: #fff; }
+  .company-item .name { font-size: .75rem; color: var(--muted); }
+  .company-item .ret { font-size: .75rem; font-weight: 600; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+
+  /* ── Main ── */
+  main { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .stat-card label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: block; margin-bottom: 6px; }
+  .stat-card .val { font-size: 1.4rem; font-weight: 700; color: #fff; }
+  .stat-card .sub { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-card h3 { font-size: .9rem; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 8px; }
+  .chart-card h3 .tag { font-size: .7rem; color: var(--muted); font-weight: 400; background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 20px; }
+
+  .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  @media(max-width:900px){ .charts-row { grid-template-columns: 1fr; } }
+
+  canvas { max-height: 280px; }
+
+  /* ── Compare panel ── */
+  .compare-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .compare-bar select, .compare-bar button { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .85rem; cursor: pointer; }
+  .compare-bar button { background: var(--accent); color: #000; font-weight: 600; border: none; }
+  .compare-bar button:hover { opacity: .85; }
+
+  /* ── Gainers/Losers ── */
+  .gl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media(max-width:700px){ .gl-grid { grid-template-columns: 1fr; } }
+  .gl-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+  .gl-item .info .sym { font-weight: 700; font-size: .9rem; }
+  .gl-item .info .nm  { font-size: .72rem; color: var(--muted); }
+
+  /* ── Loading / empty states ── */
+  .loader { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted); gap: 10px; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📈 Stock Data Intelligence Dashboard</h1>
+  </div>
+  <span>Indian Large-Caps · NSE</span>
+  <span class="badge">JarNox Internship</span>
+</header>
+
+<div class="layout">
+  <!-- ── Sidebar ── -->
+  <aside>
+    <h2>Companies</h2>
+    <div id="company-list"><div class="loader"><div class="spinner"></div> Loading…</div></div>
+  </aside>
+
+  <!-- ── Main content ── -->
+  <main>
+    <!-- Stats row -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card"><label>Select a company</label><div class="val" style="color:var(--muted);font-size:.95rem">← Click from the list</div></div>
+    </div>
+
+    <!-- Price chart + Returns distribution -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Closing Price <span class="tag">30 days</span> <span class="tag" id="filter-bar">
+          <a href="#" onclick="setDays(30);return false" style="color:var(--accent)">30d</a> ·
+          <a href="#" onclick="setDays(60);return false">60d</a> ·
+          <a href="#" onclick="setDays(90);return false">90d</a>
+        </span></h3>
+        <canvas id="priceChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Daily Return Distribution <span class="tag">last 30 days</span></h3>
+        <canvas id="returnChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 7-day MA chart -->
+    <div class="chart-card">
+      <h3>7-Day Moving Average vs Close Price</h3>
+      <canvas id="maChart"></canvas>
+    </div>
+
+    <!-- Compare two stocks -->
+    <div class="chart-card">
+      <h3>Compare Two Stocks</h3>
+      <div class="compare-bar" style="margin-bottom:16px">
+        <select id="cmp1"></select>
+        <select id="cmp2"></select>
+        <button onclick="runCompare()">Compare</button>
+        <span id="corr-label" style="font-size:.85rem;color:var(--muted)"></span>
+      </div>
+      <canvas id="compareChart"></canvas>
+    </div>
+
+    <!-- Top Gainers / Losers -->
+    <div class="chart-card" id="gl-panel">
+      <h3>Top Gainers &amp; Losers <span class="tag">latest session</span></h3>
+      <div class="loader"><div class="spinner"></div> Fetching…</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const BASE = '';          // same origin
+let allCompanies = [];
+let currentSymbol = null;
+let currentDays   = 30;
+let allData       = [];   // cached rows for current symbol
+let priceChart, returnChart, maChart, compareChart;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bootstrap
+// ─────────────────────────────────────────────────────────────────────────────
+async function init() {
+  const [companies, gl] = await Promise.all([
+    apiFetch('/companies'),
+    apiFetch('/gainers-losers'),
+  ]);
+
+  allCompanies = companies;
+
+  // Populate sidebar
+  const list = document.getElementById('company-list');
+  list.innerHTML = '';
+
+  companies.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'company-item';
+    div.dataset.sym = c.symbol;
+    div.innerHTML = `
+      <span class="sym">${c.symbol}</span>
+      <span class="name">${c.name}</span>
+      <span class="ret" id="ret-${c.symbol}">—</span>
+    `;
+    div.onclick = () => selectCompany(c.symbol);
+    list.appendChild(div);
+  });
+
+  // Populate compare dropdowns
+  ['cmp1','cmp2'].forEach((id, i) => {
+    const sel = document.getElementById(id);
+    companies.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.symbol;
+      opt.textContent = c.symbol;
+      sel.appendChild(opt);
+    });
+    sel.selectedIndex = i;
+  });
+
+  // Render gainers/losers panel
+  renderGL(gl);
+
+  // 🔥 FIX: Update ALL sidebar values (not just top/bottom)
+  companies.forEach(async (c) => {
+    try {
+      const data = await apiFetch(`/data/${c.symbol}`);
+      const latest = data.data.at(-1);
+
+      const el = document.getElementById(`ret-${c.symbol}`);
+      if (el && latest) {
+        const val = (latest.daily_return * 100).toFixed(2);
+
+        el.textContent =
+          (val >= 0 ? '▲' : '▼') + Math.abs(val) + '%';
+
+        el.className =
+          'ret ' + (val >= 0 ? 'pos' : 'neg');
+      }
+    } catch (err) {
+      console.error("Sidebar error:", c.symbol, err);
+    }
+  });
+
+  // Auto-select first company
+  if (companies.length) selectCompany(companies[0].symbol);
+
+  startAutoRefresh();
+
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Select company
+// ─────────────────────────────────────────────────────────────────────────────
+async function selectCompany(symbol) {
+  currentSymbol = symbol;
+  document.querySelectorAll('.company-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.sym === symbol);
+  });
+
+  const [data, summary, smart] = await Promise.all([
+  apiFetch(`/data/${symbol}`),
+  apiFetch(`/summary/${symbol}`),
+  apiFetch(`/smart/${symbol}`)
+]);
+
+
+  allData = data.data;
+  renderStats(summary, data, smart);
+  renderCharts(allData.slice(-currentDays));
+}
+
+function setDays(n) {
+  currentDays = n;
+  if (allData.length) renderCharts(allData.slice(-n));
+  document.querySelectorAll('#filter-bar a').forEach(a => {
+    a.style.color = a.textContent.includes(n) ? 'var(--accent)' : 'var(--text)';
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats row
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderStats(summary, data) {
+  const latest  = data.data.at(-1);
+  const prev    = data.data.at(-2);
+  const chg     = prev ? ((latest.close - prev.close) / prev.close * 100).toFixed(2) : '—';
+  const chgCls  = chg >= 0 ? 'pos' : 'neg';
+
+  // 🔥 FETCH SMART API (for signal + description)
+  let signal = "—";
+  let signalClass = "";
+  let description = "";
+  let confidence = "";
+  let action_time = "";
+
+  try {
+    const smart = await apiFetch(`/smart/${summary.symbol}`);
+
+    signal = smart.signal || "—";
+    description = smart.description || "";
+    confidence = smart.confidence || "";
+    action_time = smart.action_time || "";
+
+    if (signal.includes("BUY")) signalClass = "pos";
+    else if (signal.includes("SELL")) signalClass = "neg";
+  } catch (e) {
+    console.error("Signal error:", e);
+  }
+
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card">
+      <label>${summary.symbol} — ${summary.company}</label>
+      <div class="val">₹${latest.close.toFixed(2)}</div>
+      <div class="sub ${chgCls}">
+        ${chg >= 0 ? '▲' : '▼'} ${Math.abs(chg)}% today
+      </div>
+    </div>
+
+    <!-- ✅ UPDATED AI CARD -->
+    <div class="stat-card">
+      <label>AI Signal</label>
+      <div class="val ${signalClass}">
+        ${signal}
+      </div>
+      <div class="sub" style="font-size:0.8rem; line-height:1.4;">
+        ${description}<br>
+        <b>${confidence}</b> • ${action_time}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <label>52-Week High</label>
+      <div class="val" style="color:var(--green)">₹${summary.week52_high.toFixed(2)}</div>
+    </div>
+
+    <div class="stat-card">
+      <label>52-Week Low</label>
+      <div class="val" style="color:var(--red)">₹${summary.week52_low.toFixed(2)}</div>
+    </div>
+
+    <div class="stat-card">
+      <label>Volatility</label>
+      <div class="val" style="color:var(--yellow)">${summary.volatility_pct}%</div>
+    </div>
+  `;
+}
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Charts
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderCharts(rows) {
+  const labels  = rows.map(r => r.date.slice(5));
+  const closes  = rows.map(r => r.close);
+  const ma7     = rows.map(r => r.ma7);
+  const returns = rows.map(r => +(r.daily_return * 100).toFixed(2));
+
+  // 🔥 FETCH AI PREDICTIONS
+  let predictions = [];
+  try {
+    const predRes = await apiFetch(`/predict/${currentSymbol}`);
+    predictions = predRes.prediction || predRes.next_5_days_prediction || [];
+  } catch (e) {
+    console.error("Prediction fetch error:", e);
+  }
+
+  // 🔥 CREATE FUTURE DATES
+  let futureLabels = [];
+  if (rows.length > 0) {
+    let lastDate = new Date(rows[rows.length - 1].date);
+
+    for (let i = 1; i <= predictions.length; i++) {
+      let next = new Date(lastDate);
+      next.setDate(lastDate.getDate() + i);
+      futureLabels.push(next.toISOString().slice(5,10));
+    }
+  }
+
+  const allLabels = labels.concat(futureLabels);
+
+  // 🔥 ALIGN PREDICTION LINE
+  const predictionLine =
+    new Array(closes.length - 1).fill(null)
+    .concat([closes[closes.length - 1]])
+    .concat(predictions);
+
+  // ── PRICE CHART (UPDATED) ─────────────────────────────
+  destroyChart('priceChart');
+  priceChart = new Chart(document.getElementById('priceChart'), {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Close ₹',
+          data: closes,
+          borderColor: '#58a6ff',
+          backgroundColor: 'rgba(88,166,255,0.08)',
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'AI Prediction ',
+          data: predictionLine,
+          borderColor: '#e3b341',
+          borderDash: [6, 6],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+        }
+      ]
+    },
+    options: chartOpts('₹')
+  });
+
+  // ── MA CHART (UNCHANGED) ─────────────────────────────
+  destroyChart('maChart');
+  maChart = new Chart(document.getElementById('maChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Close ₹', data: closes, borderColor: '#58a6ff', borderWidth: 1.5, pointRadius: 1, tension: 0.3 },
+        { label: '7-Day MA', data: ma7, borderColor: '#e3b341', borderWidth: 2, pointRadius: 0, tension: 0.3 },
+      ]
+    },
+    options: chartOpts('₹')
+  });
+
+  // ── RETURNS CHART (UNCHANGED) ────────────────────────
+  destroyChart('returnChart');
+  returnChart = new Chart(document.getElementById('returnChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Daily Return %',
+        data: returns,
+        backgroundColor: returns.map(v => v >= 0 ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.7)'),
+      }]
+    },
+    options: chartOpts('%', true)
+  });
+}
+
+
+function chartOpts(unit, compact = false) {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { labels: { color: '#8b949e', boxWidth: 12 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} ${unit}` } }
+    },
+    scales: {
+      x: { ticks: { color: '#8b949e', maxTicksLimit: compact ? 8 : 15, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y: { ticks: { color: '#8b949e' },                                                   grid: { color: 'rgba(255,255,255,0.04)' } }
+    }
+  };
+}
+
+function destroyChart(id) {
+  const existing = Chart.getChart(id);
+  if (existing) existing.destroy();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Compare
+// ─────────────────────────────────────────────────────────────────────────────
+async function runCompare() {
+  const s1 = document.getElementById('cmp1').value;
+  const s2 = document.getElementById('cmp2').value;
+
+  if (s1 === s2) {
+    alert('Select different stocks');
+    return;
+  }
+
+  try {
+    const data = await apiFetch(`/compare?symbol1=${s1}&symbol2=${s2}`);
+
+    console.log("Compare API:", data); // 🔥 DEBUG
+
+    if (!data.dates || data.dates.length === 0) {
+      alert("No data available");
+      return;
+    }
+
+    // 🔥 DESTROY OLD CHART
+    destroyChart('compareChart');
+
+    compareChart = new Chart(document.getElementById('compareChart'), {
+      type: 'line',
+      data: {
+        labels: data.dates.map(d => d.slice(5)),
+        datasets: [
+          {
+            label: `${s1} (base 100)`,
+            data: data.normalised_prices[s1],
+            borderColor: '#58a6ff',
+            borderWidth: 2,
+            tension: 0.3
+          },
+          {
+            label: `${s2} (base 100)`,
+            data: data.normalised_prices[s2],
+            borderColor: '#3fb950',
+            borderWidth: 2,
+            tension: 0.3
+          }
+        ]
+      },
+      options: chartOpts('')
+    });
+
+    // 🔥 UPDATE TEXT INFO
+    document.getElementById('corr-label').textContent =
+      `Correlation: ${data.correlation} | ${s1}: ${data.total_return_pct[s1]}% | ${s2}: ${data.total_return_pct[s2]}%`;
+
+  } catch (err) {
+    console.error("Compare error:", err);
+    alert("Error loading comparison");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gainers / Losers
+// ─────────────────────────────────────────────────────────────────────────────
+function renderGL(gl) {
+  const panel = document.getElementById('gl-panel');
+  const glItem = items => items.map(item => `
+    <div class="gl-item">
+      <div class="info">
+        <div class="sym">${item.symbol}</div>
+        <div class="nm">${item.name}</div>
+      </div>
+      <div class="ret ${item.daily_return_pct >= 0 ? 'pos' : 'neg'}" style="font-size:1rem;font-weight:700">
+        ${item.daily_return_pct >= 0 ? '▲' : '▼'} ${Math.abs(item.daily_return_pct)}%
+      </div>
+    </div>`).join('');
+
+  panel.innerHTML = `
+    <h3>Top Gainers &amp; Losers <span class="tag">latest session</span></h3>
+    <div class="gl-grid">
+      <div>
+        <div style="font-size:.75rem;color:var(--green);font-weight:700;margin-bottom:8px;text-transform:uppercase;">🟢 Gainers</div>
+        ${glItem(gl.top_gainers)}
+      </div>
+      <div>
+        <div style="font-size:.75rem;color:var(--red);font-weight:700;margin-bottom:8px;text-transform:uppercase;">🔴 Losers</div>
+        ${glItem(gl.top_losers)}
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility
+// ─────────────────────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const res = await fetch(BASE + path);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function startAutoRefresh() {
+  setInterval(async () => {
+    try {
+      console.log("🔄 Refreshing data...");
+
+      // Update selected stock
+      if (currentSymbol) {
+        const [data, summary] = await Promise.all([
+          apiFetch(`/data/${currentSymbol}`),
+          apiFetch(`/summary/${currentSymbol}`)
+        ]);
+
+        allData = data.data;
+        renderStats(summary, data);
+        renderCharts(allData.slice(-currentDays));
+      }
+
+      // Update sidebar
+      allCompanies.forEach(async (c) => {
+        try {
+          const data = await apiFetch(`/data/${c.symbol}`);
+          const latest = data.data.at(-1);
+
+          const el = document.getElementById(`ret-${c.symbol}`);
+          if (el && latest) {
+            const val = (latest.daily_return * 100).toFixed(2);
+
+            el.textContent =
+              (val >= 0 ? '▲' : '▼') + Math.abs(val) + '%';
+
+            el.className =
+              'ret ' + (val >= 0 ? 'pos' : 'neg');
+          }
+        } catch {}
+      });
+
+    } catch (err) {
+      console.error("Auto refresh failed:", err);
+    }
+  }, 5000);
+}
+
+
+init().catch(err => console.error('Dashboard init error:', err));
+</script>
+</body>
+</html>
