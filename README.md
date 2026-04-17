@@ -1,6 +1,5 @@
 # 📈 Stock Data Intelligence Dashboard
 
-> **JarNox Internship Assignment** — Mini financial data platform for Indian large-cap stocks
 
 ---
 
