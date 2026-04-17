@@ -153,7 +153,4 @@ CREATE TABLE stock_data (
 
 ---
 
-## 📬 Submission
 
-Built with ❤️ for the JarNox Software Internship.  
-Questions: [support@jarnox.com](mailto:support@jarnox.com)
