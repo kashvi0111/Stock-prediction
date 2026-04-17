@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
 import numpy as np
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+
 
 # IMPORT FROM  FILES
 from data_processing import (
@@ -38,10 +41,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Stock Data Intelligence Dashboard",
+    title="Stock Data Intelligence index",
     version="1.0.0",
     lifespan=lifespan
 )
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +56,9 @@ app.add_middleware(
 )
 
 # ── APIs ────────────────────────────────────────────────
+
+
+
 
 @app.get("/companies")
 def get_companies():
@@ -330,9 +338,17 @@ def refresh(symbol: str):
     return {"symbol": symbol, "refreshed": ok}
 
 
-# ── Dashboard ───────────────────────────────────────────
+# ── index ───────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard():
-    with open("dashboard.html") as f:
+def index():
+    with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
+
+
+@app.get("/dashboard.html")
+def dashboard():
+    return FileResponse("dashboard.html")
+
+
+        

@@ -92,9 +92,35 @@
 <div class="layout">
   <!-- ── Sidebar ── -->
   <aside>
-    <h2>Companies</h2>
-    <div id="company-list"><div class="loader"><div class="spinner"></div> Loading…</div></div>
-  </aside>
+  <h2>Companies</h2>
+
+  <!-- 🔍 SEARCH BOX -->
+  <div style="padding: 10px 12px;">
+    <input 
+      type="text" 
+      id="searchBox"
+      placeholder="Search stock (e.g. TCS, INFY)"
+      style="
+        width:100%;
+        padding:8px 10px;
+        border-radius:6px;
+        border:1px solid var(--border);
+        background:var(--card);
+        color:var(--text);
+        font-size:0.85rem;
+        outline:none;
+      "
+      oninput="filterCompanies()"
+    />
+  </div>
+
+  <!-- 📊 COMPANY LIST -->
+  <div id="company-list">
+    <div class="loader">
+      <div class="spinner"></div> Loading…
+    </div>
+  </div>
+</aside>
 
   <!-- ── Main content ── -->
   <main>
@@ -112,10 +138,19 @@
           <a href="#" onclick="setDays(90);return false">90d</a>
         </span></h3>
         <canvas id="priceChart"></canvas>
+        <p style="margin-top:10px; font-size:1rem; color:var(--muted); line-height:1.4;">
+            📊 Shows stock closing price trend over selected time.  
+            🔮 Dotted line represents AI predicted future prices based on historical patterns.
+        </p>
       </div>
       <div class="chart-card">
         <h3>Daily Return Distribution <span class="tag">last 30 days</span></h3>
         <canvas id="returnChart"></canvas>
+        <p style="margin-top:28px; font-size:1rem; color:var(--muted); line-height:1.4;">
+            📈 Displays daily percentage returns.  
+            Green bars = positive returns, Red bars = negative returns.  
+            Helps understand volatility and risk.
+        </p>
       </div>
     </div>
 
@@ -123,6 +158,10 @@
     <div class="chart-card">
       <h3>7-Day Moving Average vs Close Price</h3>
       <canvas id="maChart"></canvas>
+      <p style="margin-top:10px; font-size:1rem; color:var(--muted); line-height:1.4;">
+           📉 7-day moving average smooths short-term fluctuations.  
+           Helps identify trend direction (uptrend/downtrend).
+      </p>
     </div>
 
     <!-- Compare two stocks -->
@@ -135,6 +174,10 @@
         <span id="corr-label" style="font-size:.85rem;color:var(--muted)"></span>
       </div>
       <canvas id="compareChart"></canvas>
+      <p style="margin-top:25px; font-size:1rem; color:var(--muted); line-height:1.4;">
+          ⚖️ Compares two stocks normalized to base 100.  
+          📊 Correlation shows how similarly the stocks move together.
+      </p>
     </div>
 
     <!-- Top Gainers / Losers -->
@@ -152,6 +195,22 @@ let currentSymbol = null;
 let currentDays   = 30;
 let allData       = [];   // cached rows for current symbol
 let priceChart, returnChart, maChart, compareChart;
+
+// Search Bar
+function filterCompanies() {
+  const query = document.getElementById("searchBox").value.toLowerCase();
+
+  document.querySelectorAll(".company-item").forEach(item => {
+    const symbol = item.querySelector(".sym").textContent.toLowerCase();
+    const name   = item.querySelector(".name").textContent.toLowerCase();
+
+    if (symbol.includes(query) || name.includes(query)) {
+      item.style.display = "flex";
+    } else {
+      item.style.display = "none";
+    }
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap
@@ -549,13 +608,14 @@ function startAutoRefresh() {
 
       // Update selected stock
       if (currentSymbol) {
-        const [data, summary] = await Promise.all([
+        const [data, summary, smart] = await Promise.all([
           apiFetch(`/data/${currentSymbol}`),
-          apiFetch(`/summary/${currentSymbol}`)
+          apiFetch(`/summary/${currentSymbol}`),
+          apiFetch(`/smart/${currentSymbol}`)
         ]);
 
         allData = data.data;
-        renderStats(summary, data);
+        renderStats(summary, data, smart);
         renderCharts(allData.slice(-currentDays));
       }
 

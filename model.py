@@ -1,6 +1,11 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from database import get_conn
+from fastapi import HTTPException
+from data_processing import (
+    fetch_and_store,
+    
+)
 
 def create_dataset(prices, window_size=5):
     X, y = [], []
